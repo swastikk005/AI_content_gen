@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, Sparkles, AlertCircle, Loader2, WifiOff, RefreshCw } from 'lucide-react';
 
 import TypeSelector from '@/components/generator/TypeSelector';
 import AgentStatus from '@/components/generator/AgentStatus';
@@ -24,11 +24,26 @@ function GeneratorContent() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [result, setResult] = useState<GenerationResult | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isOffline, setIsOffline] = useState(false);
+    const [isDemoMode, setIsDemoMode] = useState(false);
+
     const [steps, setSteps] = useState<AgentStep[]>([
         { id: 'research', label: 'Researching topic...', status: 'pending' },
         { id: 'outline', label: 'Creating outline...', status: 'pending' },
         { id: 'generate', label: 'Writing content...', status: 'pending' }
     ]);
+
+    // Network Detection
+    useEffect(() => {
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // Handle shared content from URL
     useEffect(() => {
@@ -50,10 +65,16 @@ function GeneratorContent() {
 
     const handleGenerate = async () => {
         if (!topic || isGenerating) return;
+        if (isOffline) {
+            setError("You are currently offline. Please check your connection.");
+            return;
+        }
 
         setIsGenerating(true);
         setError(null);
         setResult(null);
+        setIsDemoMode(false);
+
         setSteps([
             { id: 'research', label: 'Researching topic...', status: 'pending' },
             { id: 'outline', label: 'Creating outline...', status: 'pending' },
@@ -87,6 +108,10 @@ function GeneratorContent() {
                             const data = JSON.parse(line.trim().substring(6));
 
                             if (data.error) {
+                                // If the error is API key related, we can flag demo mode
+                                if (data.error.includes("OPENROUTER_API_KEY")) {
+                                    setIsDemoMode(true);
+                                }
                                 throw new Error(data.error);
                             }
 
@@ -140,7 +165,7 @@ function GeneratorContent() {
                                 <select
                                     value={tone}
                                     onChange={(e) => setTone(e.target.value)}
-                                    className="w-full p-3 rounded-xl bg-white/[0.03] border border-white/10 focus:outline-none focus:border-primary transition-all text-sm appearance-none text-white"
+                                    className="w-full p-3 rounded-xl bg-white/[0.03] border border-white/10 focus:outline-none focus:border-primary transition-all text-sm appearance-none text-white cursor-pointer"
                                 >
                                     <option>Professional</option>
                                     <option>Casual</option>
@@ -154,7 +179,7 @@ function GeneratorContent() {
                                 <select
                                     value={length}
                                     onChange={(e) => setLength(e.target.value)}
-                                    className="w-full p-3 rounded-xl bg-white/[0.03] border border-white/10 focus:outline-none focus:border-primary transition-all text-sm appearance-none text-white"
+                                    className="w-full p-3 rounded-xl bg-white/[0.03] border border-white/10 focus:outline-none focus:border-primary transition-all text-sm appearance-none text-white cursor-pointer"
                                 >
                                     <option value="short">Short (~800w)</option>
                                     <option value="medium">Medium (~1500w)</option>
@@ -165,7 +190,7 @@ function GeneratorContent() {
 
                         <button
                             onClick={handleGenerate}
-                            disabled={isGenerating || !topic}
+                            disabled={isGenerating || !topic || isOffline}
                             className="w-full py-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed group shadow-[0_0_20px_rgba(124,58,237,0.2)] hover:shadow-[0_0_30px_rgba(124,58,237,0.4)]"
                         >
                             {isGenerating ? (
@@ -181,10 +206,32 @@ function GeneratorContent() {
                             )}
                         </button>
 
-                        {error && (
-                            <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+                        {isDemoMode && (
+                            <div className="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-secondary/20 text-secondary text-xs">
                                 <AlertCircle size={16} />
-                                {error}
+                                Running in Demo Mode: Using sample data for preview.
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="flex flex-col gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+                                <div className="flex items-center gap-3">
+                                    <AlertCircle size={16} />
+                                    {error}
+                                </div>
+                                <button
+                                    onClick={handleGenerate}
+                                    className="w-full py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
+                                >
+                                    <RefreshCw size={14} /> Retry
+                                </button>
+                            </div>
+                        )}
+
+                        {isOffline && (
+                            <div className="flex items-center gap-3 p-4 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs">
+                                <WifiOff size={16} />
+                                You are offline. Connectivity is required for live generation.
                             </div>
                         )}
                     </div>
@@ -223,19 +270,6 @@ function GeneratorContent() {
 export default function GeneratorPage() {
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white selection:bg-primary/30">
-            {/* Header */}
-            <header className="px-6 py-4 flex items-center justify-between border-b border-white/5 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0 z-50">
-                <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors">
-                    <ChevronLeft size={20} />
-                    <span className="text-sm font-bold">Back to Landing</span>
-                </Link>
-                <div className="flex items-center gap-2 font-black text-lg">
-                    <span className="w-6 h-6 rounded bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-[10px]">C</span>
-                    ContentForge
-                </div>
-                <div className="w-[100px]" /> {/* Spacer */}
-            </header>
-
             <Suspense fallback={
                 <div className="w-full h-[calc(100vh-65px)] flex items-center justify-center">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
