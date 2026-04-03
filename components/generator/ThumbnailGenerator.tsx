@@ -12,24 +12,18 @@ export default function ThumbnailGenerator({ title }: ThumbnailGeneratorProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
 
-    const generateThumbnail = async () => {
+    const buildPollinationsUrl = () => {
+        const prompt = `Professional blog header image: ${title}. Modern design, vibrant colors, no text overlay, photographic quality, wide format`;
+        const seed = Math.floor(Math.random() * 99999);
+        return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&nologo=true&nofeed=true&seed=${seed}`;
+    };
+
+    const generateThumbnail = () => {
         setLoading(true);
         setError(false);
         setImgSrc('');
-        try {
-            const res = await fetch('/api/thumbnail', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title }),
-            });
-            if (!res.ok) throw new Error('Failed');
-            const blob = await res.blob();
-            setImgSrc(URL.createObjectURL(blob));
-        } catch {
-            setError(true);
-        } finally {
-            setLoading(false);
-        }
+        // Set URL directly — browser loads the image, no server timeout
+        setTimeout(() => setImgSrc(buildPollinationsUrl()), 0);
     };
 
     const download = () => {
@@ -61,13 +55,13 @@ export default function ThumbnailGenerator({ title }: ThumbnailGeneratorProps) {
     return (
         <div className="mt-6 border-t border-white/5 pt-6 space-y-3">
 
-            {/* Loading */}
+            {/* Loading spinner — shown until onLoad fires */}
             {loading && (
                 <div className="aspect-video w-full rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col items-center justify-center gap-4">
                     <Loader2 size={36} className="text-purple-500 animate-spin" />
                     <div className="text-center">
                         <p className="text-sm font-bold text-white">Generating thumbnail...</p>
-                        <p className="text-[10px] text-zinc-500 mt-1">This takes ~15 seconds</p>
+                        <p className="text-[10px] text-zinc-500 mt-1">This takes ~15–30 seconds</p>
                     </div>
                 </div>
             )}
@@ -83,13 +77,21 @@ export default function ThumbnailGenerator({ title }: ThumbnailGeneratorProps) {
                 </div>
             )}
 
-            {/* Success */}
+            {/* Hidden img that loads in background; reveals on load */}
             {imgSrc && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    src={imgSrc}
+                    alt={`Thumbnail for ${title}`}
+                    className={`w-full rounded-2xl border border-white/10 object-cover transition-opacity duration-500 ${loading ? 'hidden' : 'block'}`}
+                    onLoad={() => setLoading(false)}
+                    onError={() => { setLoading(false); setError(true); setImgSrc(''); }}
+                />
+            )}
+
+            {/* Controls — only shown after load */}
+            {imgSrc && !loading && !error && (
                 <>
-                    <div className="aspect-video w-full rounded-2xl overflow-hidden border border-white/10">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={imgSrc} alt={`Thumbnail for ${title}`} className="w-full h-full object-cover" />
-                    </div>
                     <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-1">1280 × 720px</p>
                     <div className="flex gap-2">
                         <button onClick={download} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 text-xs font-bold rounded-xl transition-all">
